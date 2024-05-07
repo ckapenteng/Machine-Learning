@@ -1,0 +1,576 @@
+---
+title: "Final Project"
+author: "Collins Kwasi Apenteng, Mbye Sallah"
+date: "2024-05-03"
+output: html_document
+--- 
+
+```{r include=FALSE}
+knitr::opts_chunk$set(comment = NA)
+```
+
+# Data Exploration
+
+#### Loading Libraries 
+
+```{r}
+library(e1071)
+library(ROCR)
+library(class)
+library(tree)
+library(randomForest)
+library(tidyverse)
+```
+
+#### Importing the Data
+
+```{r}
+sani = read.csv("Sani_Data.csv")
+sani_backup =sani
+names(sani)
+```
+
+The dataset contains 56 features (variabls) on 303 individuals. Not all the features are relevant. As a practice in predictive modelling, we first explored the dataset and select the relavant features.
+
+```{r}
+any(is.na(sani))
+```
+
+#### Feature selection Process
+
+This is how we select our relevant variables. We use random forest for feature selection. Previous studies used SVM weight, correlation matrix, and principal component analysis. However, Kursa and Rudnicki (2011) showed that using a Random Forest algorithm to identify and rank the most relevant features for predicting the outcome yields reasonable accuracy.
+
+```{r}
+# Convert all character and integer columns that are categorical to factors
+sani = sani %>%
+  mutate_if(is.character, as.factor) %>%  # Converts all character columns to factors
+  mutate_if(is.integer, function(x) {     # Converts integer columns if they are categorical
+    if (n_distinct(x) < 10) {             # Assuming categorical if fewer than 10 unique values
+      as.factor(x)
+    } else {
+      x                                   # Leaves the column as is if it's likely numeric
+    }
+  })
+
+str(sani)
+```
+
+
+```{r}
+# Train the model with importance=TRUE to ensure importance scores are calculated
+rf_model = randomForest(Cath ~ ., data = sani, ntree = 500, importance = TRUE)
+
+# Extracting importance scores
+importance_scores = importance(rf_model)
+feature_importance = importance_scores[, "MeanDecreaseAccuracy"]
+
+# Sort features by importance
+sorted_features = sort(feature_importance, decreasing = TRUE)
+top_15_features = names(sorted_features)[1:15] # Select top 15 features
+print(top_15_features)
+```
+
+We found that other studies have used similar variables as relevant features of the data. We were surprised sex was not listed as relevant but we found that some previous studies did not use sex. Perhaps it has no significant influence on CAD. 
+
+# Summary Statistics and Data Visualization
+
+#### Summary Statistics
+
+```{r}
+# Age
+summary(sani$Age)
+# Blood pressure
+summary(sani$BP)
+# Ejection fraction percentage
+summary(sani$EF.TTE)
+# Triglycerides
+summary(sani$TG)
+# erythrocyte sedimentation rate
+summary(sani$ESR)
+# Fasting Blood Sugar
+summary(sani$FBS)
+
+```
+
+##### Filter the data to get only those that have CAD
+
+```{r}
+sani_cad = filter(sani, Cath == "Cad")
+```
+
+
+##### Calculate the standad deviation for only those that got CAD
+
+```{r}
+# Age
+sd(sani_cad$Age)
+# Blood pressure
+sd(sani_cad$BP)
+# Ejection fraction percentage
+sd(sani_cad$EF.TTE)
+# Triglycerides
+sd(sani_cad$TG)
+# erythrocyte sedimentation rate
+sd(sani_cad$ESR)
+# Fasting Blood Sugar
+sd(sani_cad$FBS)
+```
+
+##### Calculate the summary stats for only those that got CAD
+
+```{r}
+# Age
+summary(sani_cad$Age)
+# Blood pressure
+summary(sani_cad$BP)
+# Ejection fraction percentage
+summary(sani_cad$EF.TTE)
+# Triglycerides
+summary(sani_cad$TG)
+# erythrocyte sedimentation rate
+summary(sani_cad$ESR)
+# Fasting Blood Sugar
+summary(sani_cad$FBS)
+
+```
+
+##### Filter the data to get only those that have CAD
+```{r}
+sani_normal = filter(sani, Cath == "Normal")
+```
+
+##### Calculate the summary stats for normal people
+```{r}
+# Age
+summary(sani_normal$Age)
+# Blood pressure
+summary(sani_normal$BP)
+# Ejection fraction percentage
+summary(sani_normal$EF.TTE)
+# Triglycerides
+summary(sani_normal$TG)
+# erythrocyte sedimentation rate
+summary(sani_normal$ESR)
+# Fasting Blood Sugar
+summary(sani_normal$FBS)
+```
+
+##### Summary table of some categorical variables
+```{r}
+#typical chest pain and CAD
+table(sani$Typical.Chest.Pain, sani$Cath)
+```
+People with typical chest pain are more likely to have CAD
+
+```{r}
+# Atypcal and CAD
+table(sani$Atypical, sani$Cath)
+```
+Those who are not atypical are more likely to have CAD
+
+```{r}
+# Hyper tension and CAD
+table(sani$HTN, sani$Cath)
+```
+You are more likely to have CAD if you have Hyper tension
+
+```{r}
+# Valvular Heart Disease and CAD
+table(sani$VHD, sani$Cath)
+```
+
+```{r}
+# Diabetes and CAD
+table(sani$DM, sani$Cath) # Those who have diabetes are more likely to have CAD
+```
+
+#### Data Visualizations
+
+#### Age Distribution
+```{r}
+ggplot(sani) +
+  geom_histogram(aes(Age), fill = "gray", col = "black") + 
+  labs(x = "Age", y = "Number of Individuals", title = "Age Distribution") + theme_bw() +   theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank()) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+### Make the variables categorical
+```{r}
+sani$Typical.Chest.Pain = as.factor(sani$Typical.Chest.Pain)
+```
+
+
+#### Relationship between blood presure and age
+```{r}
+ggplot(sani) +
+  geom_point(aes(x = Age, y = BP, color = Cath)) +
+  labs(title = "Relationship Between Blood Pressure and Age", y = "Blood Pressure") + theme_bw() +   theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank()) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+### Relationship between erythrocyte sedimentation rate and Age
+```{r}
+ggplot(sani) +
+  geom_point(aes(x = Age, y = ESR, color = Cath)) +
+  labs(title = "Relationship Between Erythrocyte Sedimentation Rate and Age", y = "Erythrocyte Sedimentation Rate") + theme_bw() +   theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank()) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+#### Relationship between ejection fraction and age
+```{r}
+ggplot(sani) +
+  geom_point(aes(x = Age, y = EF.TTE, color = Cath)) +
+  labs(title = "Relationship Between Ejection Fraction and Blood Pressure", x = "Blood Pressure", y = "Ejection Fraction (%)", ) + theme_bw() +   theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank()) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+#### Relationship Between Fasting Blood Sugar and Age
+```{r}
+ggplot(sani) +
+  geom_point(aes(x = Age, y = FBS, color = Cath)) +
+  labs(title = "Relationship Between Fasting Blood Sugar and Age", y = "Fasting Blood Sugar") + theme_bw() +   theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank()) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+#### Relationship Between Fasting Blood Sugar and Blood Pressure
+```{r}
+ggplot(sani) +
+  geom_point(aes(x = BP, y = FBS, color = Cath)) +
+  labs(title = "Relationship Between Fasting Blood Sugar and Blood Pressure", x = "Blood Pressure", y = "Fasting Blood Sugar") + theme_bw() +   theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank()) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+#### Relationship Between ejection fraction and erythrocyte sedimentation rate
+```{r}
+ggplot(sani) +
+  geom_point(aes(x = EF.TTE, y = ESR, color = Cath)) +
+  labs(title = "Relationship Between Ejection Fraction and Erythrocyte Sedimentation Rate", x = "Ejection Fraction", y = "Erythrocyte Sedimentation Rate") + theme_bw() +   theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank()) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+#### Subsetting our features based on the variable importance by Random Forest
+
+```{r}
+sani=subset(sani_backup, select = c(Cath,Typical.Chest.Pain,Atypical,Age,Region.RWMA,EF.TTE,Nonanginal,Tinversion,HTN,BP,ESR,CR,DM,VHD,TG,FBS))
+str(sani)
+```
+See the distinct levels under each categorical variable
+
+```{r}
+unique(sani$Cath)
+unique(sani$Atypical)
+unique(sani$Nonanginal)
+unique(sani$VHD)
+```
+
+
+```{r}
+# Recoding features in the data
+sani$Cath = ifelse(sani$Cath == "Cad", 1, 0)
+sani$Atypical = ifelse(sani$Atypical == "Y", 1, 0)
+sani$Nonanginal = ifelse(sani$Nonanginal == "Y", 1, 0)
+sani$VHD = as.numeric(factor(sani$VHD, levels = c("N", "mild", "Moderate", "Severe"), labels = c(0, 1, 2, 3)))
+
+sani$Cath = as.factor(sani$Cath)
+sani$Atypical = as.factor(sani$Atypical)
+sani$Nonanginal = as.factor(sani$Nonanginal)
+sani$VHD = as.factor(sani$VHD)
+str(sani)
+
+```
+
+## Splitting the Data int Train and Test
+
+We use the 80-20 rule
+
+```{r}
+set.seed(180752)
+train=sample(1:nrow(sani), 0.8*nrow(sani)) 
+train_data=sani[train, ]
+dim(train_data)
+test_data=sani[-train,]
+dim(test_data)
+```
+
+# Model Fitting for the 5 ML Algorithms
+
+## Logistic Regression Model
+
+```{r}
+logistic=glm(Cath~.,data=train_data,family="binomial")
+result_logistic=predict(logistic,test_data,type="response")
+predicted.response=ifelse(result_logistic>0.5,1,0)
+true.response=test_data$Cath
+cm_logistic=table(True = true.response,Predicted = predicted.response)
+cm_logistic
+```
+```{r}
+Accuacy1 = sum(diag(cm_logistic))/sum(cm_logistic)
+cat("Accuracy for Logit:", Accuacy1, "\n")
+
+TPR1 = (cm_logistic[2,2])/(cm_logistic[2,2]+cm_logistic[2,1])
+cat("TPR for Logit:", TPR1, "\n")
+```
+
+
+## K-Nearest Neighbor (KNN) Classifier
+
+First, we find the "k" that maximizes the accuracy rate.
+
+```{r}
+library(class) # required package
+test_data$Cath
+acc=vector()
+for (i in 1:100){
+  knn.predict=knn(train = train_data[, -1], test = test_data[, -1], train_data$Cath, k = i)
+  cm=table(test_data$Cath,knn.predict)
+  acc[i]=sum(diag(cm))/sum(cm)
+}
+```
+
+
+```{r}
+plot(1:100,acc,type="l",col="red",xlab="Values of K",main="Accurracy for different choices of k",ylab="Accurracy")
+```
+
+```{r}
+which.max(acc) # give the k that maximizes accuracy.
+```
+
+We fit the KNN model using an optimal k=22.
+
+```{r}
+X.train=train_data[ ,-1]
+X.test=test_data[,-1]
+Y.test=test_data$Cath
+Y.train=train_data$Cath
+knn_Predict=knn(X.train,X.test,Y.train,k=22)
+predict.Y=knn_Predict
+true.Y=Y.test
+## Confusion Matrix
+cm_knn=table(True = true.Y,Predicted=predict.Y)
+cm_knn
+```
+
+```{r}
+Accuacy2 = sum(diag(cm_knn))/sum(cm_knn)
+cat("Accuracy for KNN:", Accuacy2, "\n")
+
+TPR2 = (cm_knn[2,2])/(cm_knn[2,2]+cm_knn[2,1])
+cat("TPR for KNN:", TPR2, "\n")
+```
+
+## Naive Bayes
+
+```{r}
+nb.fit = naiveBayes(Cath~.,data=train_data)
+nb.pred=predict(nb.fit,newdata=test_data)
+cm_nb=table(True=true.response,Predicted=nb.pred)
+cm_nb
+```
+```{r}
+Accuacy3 = sum(diag(cm_nb))/sum(cm_nb)
+cat("Accuracy for Naive Baye:", Accuacy3, "\n")
+
+TPR3 = (cm_nb[2,2])/(cm_nb[2,2]+cm_nb[2,1])
+cat("TPR for Naive Baye:", TPR3, "\n")
+```
+
+## Support Vector machine
+
+```{r}
+svm_rad = svm(Cath ~ ., data = sani, kernel = "radial", cost = 5, gamma = 0.1, type="C-classification")
+
+ypred_svmr =predict(svm_rad, test_data)
+cm_svm1=table(True=true.response, predict = ypred_svmr)
+cm_svm1
+```
+
+```{r}
+Accuacy4 = sum(diag(cm_svm1))/sum(cm_svm1)
+cat("Accuracy for SVM:", Accuacy4, "\n")
+
+TPR4 = (cm_svm1[2,2])/(cm_svm1[2,2]+cm_svm1[2,1])
+cat("TPR for SVM:", TPR4, "\n")
+```
+
+Suppose we set cost and gamma at 30 and 0.1 respectively, we get the following results. 
+
+```{r}
+svm_robust = svm(Cath ~ ., data = sani, kernel = "radial", cost = 30, gamma = 0.1, type="C-classification")
+
+ypred_svmr =predict(svm_robust, test_data)
+cm_svm1=table(True=true.response, predict = ypred_svmr)
+
+Accuacy4.1 = sum(diag(cm_svm1))/sum(cm_svm1)
+cat("Accuracy for SVM:", Accuacy4.1, "\n")
+TPR4.1 = (cm_svm1[2,2])/(cm_svm1[2,2]+cm_svm1[2,1])
+cat("TPR for SVM:", TPR4.1, "\n")
+```
+
+This shows that the accuracy and sensitivity depends on tuning parameters such as cost and gamma. So how can we choose the optimal cost and gamma? This is a crucial limitation of our project and we are acknowledging it here. In the future, we may consider it in this field of machine learning. We can show that the AUC for this model will be 1, which is rare in practical cases.
+
+The rest of our analysis uses $cost=5$ and $gamma = 0.1$ for ROC analysis. This was the work we did in our project. For the purpose of making this available to the public, I subvert a crucial the limitation of our project by optimally choosing cost and gamma using cross validation.
+
+#### I propose we fit an SVM model that optimally selects tuning parameters. 
+
+Hereafter, we use an SVM specification that is robust to optimal tuning parameters.
+
+```{r}
+# Define the parameter grid
+param_grid <- list(
+  cost = 30^seq(-1, 2, by=.1),  # Example range: 0.1, 1, 10, 100
+  gamma = 30^seq(-2, 1, by=.1)  # Example range: 0.01, 0.1, 1, 10
+)
+
+# Perform grid search with cross-validation
+tune_result <- tune(
+  svm,
+  Cath ~ .,
+  data = sani,
+  kernel = "radial",
+  ranges = param_grid,
+  type = "C-classification"
+)
+
+# Print the best parameters
+print(tune_result$best.parameters)
+
+```
+
+```{r}
+svm_robust = svm(Cath ~ ., data = sani, kernel = "radial", cost = tune_result$best.parameters[1,1], gamma = tune_result$best.parameters[1,2], type="C-classification")
+
+ypred_svmr =predict(svm_robust, test_data)
+cm_svm1=table(True=true.response, predict = ypred_svmr)
+cm_svm1
+Accuacy4.1 = sum(diag(cm_svm1))/sum(cm_svm1)
+cat("Accuracy for SVM:", Accuacy4.1, "\n")
+TPR4.1 = (cm_svm1[2,2])/(cm_svm1[2,2]+cm_svm1[2,1])
+cat("TPR for SVM:", TPR4.1, "\n")
+```
+
+#### Random forest (rf)
+```{r}
+set.seed(180752)
+rf_model=randomForest(as.factor(Cath)~.,data=train_data,method="class",
+                      mtry=3,     # Number of branch variables
+                      ntree=1000) # Number of trees to grow
+
+rf_predict=predict(rf_model,newdata=test_data,method="class")
+cm_rf=table(True=true.response,Predicted=rf_predict)
+cm_rf
+```
+
+
+```{r}
+Accuacy5 = sum(diag(cm_rf))/sum(cm_rf)
+cat("Accuracy for random forest:", Accuacy5, "\n")
+
+TPR5 = (cm_rf[2,2])/(cm_rf[2,2]+cm_rf[2,1])
+cat("TPR for random rorest:", TPR5, "\n")
+```
+
+
+#### Logistic Model
+
+```{r}
+pred=prediction(result_logistic,true.response)
+perf_logistic=performance(pred,"tpr","fpr")
+auc.log=performance(pred,"auc" )
+auc3=auc.log@y.values
+round(as.numeric(auc3),4)
+```
+
+#### KNN Classifier
+
+```{r}
+## KNN
+knn_Predict=knn(X.train,X.test,Y.train,k=22,prob = TRUE)
+knn_Predict=attributes(knn_Predict)$prob
+true.Y=Y.test
+pred=prediction(knn_Predict,true.Y)
+perf_knn=performance(pred,"tpr","fpr")
+## Area under the curve
+auc=performance(pred,"auc")
+auc4=auc@y.values
+round(as.numeric(auc4),4)
+```
+
+#### Naive Bayes Classifier
+
+```{r}
+nb.response = naiveBayes(Cath~.,data=train_data)
+nb.pred=predict(nb.response,newdata=test_data,type="raw")
+nb.pred=nb.pred[,2]
+predicted_nb =prediction(nb.pred, test_data$Cath)
+perf_nb =performance(predicted_nb, "tpr", "fpr")
+auc.nb=performance(predicted_nb,"auc" )
+auc2=auc.nb@y.values
+round(as.numeric(auc2),4)
+```
+
+#### SVM Classifier
+
+We specify two svm models to show that svm performance is sensitive to the choice tuning parameters such as cost and gamma. 
+
+```{r}
+response_svmrobust =attributes(predict(svm_robust, test_data, decision.values = TRUE))$decision.values
+predicted_obj =prediction(response_svmrobust, test_data$Cath)
+perf_svmRobust =performance(predicted_obj, "tpr", "fpr")
+auc=performance(predicted_obj,"auc" )
+auc1=auc@y.values
+round(as.numeric(auc1),4)
+
+```
+
+### Random Forest Classfier
+
+```{r}
+predictionr=predict(rf_model,newdata =test_data,type="prob" )
+result=predictionr[,2]
+true.response=test_data$Cath
+pred=prediction(result,true.response)
+perf_nb=performance(pred,"tpr","fpr")
+auc=performance(pred,"auc")
+auc_rf=auc@y.values
+round(as.numeric(auc_rf),4)
+```
+
+#### ROC Curve
+
+For this plot, we include only one of our SVMs computed above.
+
+```{r}
+# Plot ROC curves for all three models
+plot(perf_logistic, col = "blue", lwd=2, lty=6, main = "ROC Curves for the 5 Classifiers")
+plot(perf_knn, col = "grey", lwd=1, lty=1, add = TRUE)
+plot(perf_nb, col = "steelblue",lwd=2.5, lty=5, add = TRUE)
+plot(perf_svmRobust, col = "red", lwd=1, lty=1, add = TRUE)
+plot(perf_nb, col = "orange",lwd=3, lty=4, add = TRUE)
+
+legend(0.65,0.5,
+       legend=c("logistic:AUC=0.8656",
+                "KNN:AUC=0.7406",
+                "NB:AUC=0.8997",
+                "SVM:AUC=0.9269",
+                "RF:AUC=0.8741"),
+       lwd=c(2,1,2.5,1,3),
+       col=c("blue", "grey", "steelblue", "red", "orange"),
+       lty=c(6,1,5,1,4),
+       cex=0.7)
+```
+
+Comparing the coefficients of the classifiers, we see that the SVM performs better than the other classifiers using all the metrics we employed. It has the highest predictive accuracy rate, sensitivity, and AUC. The ROC curve above shows that SVM model has the highest AUC even with optimal choice of tuning parameters. 
+
+Our results suggest that the SVM model can be manipulated to yield biased predictive accuracy and sensitivity (TPR) if tuning parameters are not optimally chosen.
